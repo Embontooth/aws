@@ -1,0 +1,29 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_DEFAULT_REGION: "ap-south-1"
+    ACCOUNT_ID: "859762281547"           # replace
+    ECR_REPO: "spam-detector"           # replace if you want different name
+    MODEL_S3_BUCKET: "https://spam-detection-bucket-1.s3.ap-south-1.amazonaws.com" # replace with the S3 bucket you uploaded model files to
+    MODEL_S3_PREFIX: ""                  # optional prefix/path inside bucket (eg "models/")
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to AWS ECR...
+      - aws --version
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - echo "Downloading model artifacts from s3..."
+      - aws s3 cp s3://$MODEL_S3_BUCKET/$MODEL_S3_PREFIX/spam_model.pkl spam_model.pkl
+      - aws s3 cp s3://$MODEL_S3_BUCKET/$MODEL_S3_PREFIX/tfidf_vectorizer.pkl tfidf_vectorizer.pkl
+  build:
+    commands:
+      - echo Build started on `date`
+      - docker build -t spam-detector:latest .
+      - docker tag spam-detector:latest $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPO:latest
+  post_build:
+    commands:
+      - echo Push started on `date`
+      - docker push $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPO:latest
+artifacts:
+  files: none
