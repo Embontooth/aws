@@ -3,42 +3,42 @@ version: 0.2
 env:
   variables:
     AWS_DEFAULT_REGION: "ap-south-1"
-    ACCOUNT_ID: "859762281547"           # replace
-    ECR_REPO: "spam-detector"           # replace if you want different name
-    MODEL_S3_BUCKET: "spam-detection-bucket-1" # replace with the S3 bucket you uploaded model files to
-    MODEL_S3_PREFIX: ""                  # optional prefix/path inside bucket (eg "models/")
+    ACCOUNT_ID: "859762281547"
+    ECR_REPO: "spam-detector"
+    MODEL_S3_BUCKET: "spam-detection-bucket-1"
+    MODEL_S3_PREFIX: ""    # leave empty if models are at bucket root
+
 phases:
   pre_build:
     commands:
       - echo "MODEL_S3_BUCKET='$MODEL_S3_BUCKET' MODEL_S3_PREFIX='$MODEL_S3_PREFIX'"
       - aws --version
-      - echo "Checking S3 objects at s3://$MODEL_S3_BUCKET/${MODEL_S3_PREFIX}"
-      # Build a proper base path: if MODEL_S3_PREFIX is empty -> base="s3://bucket"
-      - |
+      - echo "Resolving S3 base path..."
+      - >
         if [ -z "$MODEL_S3_PREFIX" ]; then
           S3_BASE="s3://$MODEL_S3_BUCKET"
         else
-          # remove any leading/trailing slashes in prefix to avoid double-slashes
           CLEAN_PREFIX=$(echo "$MODEL_S3_PREFIX" | sed 's@^/*@@; s@/*$@@')
           S3_BASE="s3://$MODEL_S3_BUCKET/$CLEAN_PREFIX"
         fi
-      - echo "Resolved S3 base: $S3_BASE"
-      - aws s3 ls "$S3_BASE/" || echo "Listing failed (maybe empty), continuing"
-      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - echo "S3_BASE=$S3_BASE"
+      - aws s3 ls "$S3_BASE/" || echo "s3 ls failed (maybe empty)"
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION \
+          | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
       - echo "Downloading model artifacts from $S3_BASE..."
       - aws s3 cp "$S3_BASE/spam_model.pkl" spam_model.pkl
       - aws s3 cp "$S3_BASE/tfidf_vectorizer.pkl" tfidf_vectorizer.pkl
 
   build:
     commands:
-      - echo Build started on `date`
+      - echo "Build started on `date`"
       - docker build -t spam-detector:latest .
       - docker tag spam-detector:latest $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPO:latest
 
   post_build:
     commands:
-      - echo Push started on `date`
+      - echo "Push started on `date`"
       - docker push $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPO:latest
 
 artifacts:
-  files: none
+  files: []
