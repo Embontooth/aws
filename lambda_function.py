@@ -3,64 +3,92 @@ import boto3
 import joblib
 import os
 
-# CONFIG
-S3_BUCKET = "spam-detection-bucket-1"   # only used if models not in image
-CLASSIFIER_KEY = "spam_model.pkl"
-VECTORIZER_KEY = "tfidf_vectorizer.pkl"
+# --- Load Model and Vectorizer from S3 ---
+# This part assumes you already have logic to download/load your .pkl files.
+# For example:
+# s3 = boto3.client('s3')
+# BUCKET_NAME = os.environ.get('BUCKET_NAME') # Set BUCKET_NAME in Lambda env vars
+# s3.download_file(BUCKET_NAME, 'spam_model.pkl', '/tmp/spam_model.pkl')
+# s3.download_file(BUCKET_NAME, 'tfidf_vectorizer.pkl', '/tmp/tfidf_vectorizer.pkl')
+#
+# model = joblib.load('/tmp/spam_model.pkl')
+# vectorizer = joblib.load('/tmp/tfidf_vectorizer.pkl')
+# --- (End of example model loading) ---
 
-LOCAL_CLASSIFIER_PATH = "/var/task/spam_model.pkl"       # when bundled in image
-LOCAL_VECTORIZER_PATH = "/var/task/tfidf_vectorizer.pkl"
+# For demonstration, we'll use placeholder logic.
+# Replace this with your actual model loading.
+print("Loading model and vectorizer...")
+# model = ...
+# vectorizer = ...
 
-MODEL_LOADED = False
-classifier = None
-vectorizer = None
 
-def load_models():
-    global MODEL_LOADED, classifier, vectorizer
-    if MODEL_LOADED:
-        return
-
-    # 1) try local files (bundled into image)
-    if os.path.exists(LOCAL_CLASSIFIER_PATH) and os.path.exists(LOCAL_VECTORIZER_PATH):
-        classifier = joblib.load(LOCAL_CLASSIFIER_PATH)
-        vectorizer = joblib.load(LOCAL_VECTORIZER_PATH)
-        MODEL_LOADED = True
-        print("Loaded models from image filesystem")
-        return
-
-    # 2) fallback: download from S3 at runtime
-    s3 = boto3.client("s3")
-    clf_tmp = "/tmp/spam_model.pkl"
-    vec_tmp = "/tmp/tfidf_vectorizer.pkl"
-    if not os.path.exists(clf_tmp):
-        s3.download_file(S3_BUCKET, CLASSIFIER_KEY, clf_tmp)
-        s3.download_file(S3_BUCKET, VECTORIZER_KEY, vec_tmp)
-    classifier = joblib.load(clf_tmp)
-    vectorizer = joblib.load(vec_tmp)
-    MODEL_LOADED = True
-    print("Downloaded models from S3 into /tmp")
-
-# handler
 def lambda_handler(event, context):
+    
+    # Add a log to see exactly what Lambda receives
+    print(f"Received event: {json.dumps(event)}")
+
+    data = None
+    
     try:
-        if not MODEL_LOADED:
-            load_models()
+        # 1. Check if 'body' exists (from Function URL or API Gateway)
+        if "body" in event and event["body"]:
+            print("Parsing event['body']...")
+            data = json.loads(event["body"])
+        else:
+            # 2. Assume event *is* the body (from a direct 'Test' invocation)
+            print("Using event as data...")
+            data = event
+            
+        # 3. Extract the email text
+        email_text = data.get("text")
 
-        body = event.get("body")
-        if isinstance(body, str):
-            body = json.loads(body)
-        text = body.get("text", "")
-        if not text.strip():
-            return {"statusCode":400, "body": json.dumps({"error":"Empty text"})}
+        if not email_text:
+            print("Error: 'text' field is missing or empty in the request.")
+            return {
+                "statusCode": 400,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "Empty text. Request body must be JSON with a 'text' key."})
+            }
 
-        X = vectorizer.transform([text])
-        pred = classifier.predict(X)[0]
-        result = "SPAM" if int(pred) == 1 else "NOT SPAM"
+        print(f"Received text: {email_text}")
+
+        # --- PREDICTION LOGIC ---
+        # (Replace this with your actual scikit-learn logic)
+        # 
+        # Example:
+        # 1. Vectorize the text
+        # text_vectorized = vectorizer.transform([email_text])
+        # 2. Predict
+        # prediction_code = model.predict(text_vectorized)[0] # Get first prediction
+        # result = "spam" if prediction_code == 1 else "ham"
+        
+        # Using a placeholder result for this example:
+        result = "spam" if "free" in email_text.lower() else "ham"
+        # --- END PREDICTION LOGIC ---
+
+        print(f"Prediction: {result}")
+
         return {
-            "statusCode":200,
-            "headers":{"Access-Control-Allow-Origin":"*"},
-            "body": json.dumps({"result": result})
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({
+                "text_processed": email_text,
+                "prediction": result
+            })
+        }
+
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from event body: {event.get('body')}")
+        return {
+            "statusCode": 400,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "Invalid JSON format in request body."})
         }
     except Exception as e:
-        print("ERROR", e)
-        return {"statusCode":500, "body": json.dumps({"error": str(e)})}
+        # Catch other potential errors (e.g., model loading, prediction)
+        print(f"Internal error: {str(e)}")
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": f"Internal server error: {str(e)}"})
+        }
