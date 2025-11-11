@@ -32,15 +32,6 @@ phases:
       - echo "Build started on `date`"
       - docker build -t spam-detector:latest .
       - docker tag spam-detector:latest $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPO:latest
-        build:
-      - echo "Files in build context (top-level):" 
-      - ls -la
-      - echo "Recursive listing (repo):"
-      - ls -laR
-      - echo "PWD: $(pwd)"
-      - echo "Build started on `date`"
-      - docker build -t spam-detector:latest .
-
   post_build:
     commands:
       - echo "Push started on `date`"
