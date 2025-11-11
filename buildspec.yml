@@ -23,9 +23,7 @@ phases:
         fi
       - echo "S3_BASE=$S3_BASE"
       - aws s3 ls "$S3_BASE/" || echo "s3 ls failed (maybe empty)"
-      - aws ecr get-login-password --region $AWS_DEFAULT_REGION \
-          | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
-      - echo "Downloading model artifacts from $S3_BASE..."
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
       - aws s3 cp "$S3_BASE/spam_model.pkl" spam_model.pkl
       - aws s3 cp "$S3_BASE/tfidf_vectorizer.pkl" tfidf_vectorizer.pkl
 
